@@ -1,4 +1,4 @@
 {
-    "wav_dir": "/path/to/MSP-PODCAST-1.11/Audios",
-    "label_path": "/path/to/processed_labels.csv"
+    "wav_dir": "/data/Odyssey_SER_Challenge/Audios/",
+    "label_path": "/data/Odyssey_SER_Challenge/Labels/labels_consensus.csv"
 }

@@ -1,32 +1,31 @@
 # -*- coding: UTF-8 -*-
 # Local modules
-import os
-import sys
 import argparse
+import copy
+import glob
+import importlib
+import os
+import pickle as pk
+import sys
+
+import librosa
 # 3rd-Party Modules
 import numpy as np
-import pickle as pk
 import pandas as pd
-from tqdm import tqdm
-import glob
-import librosa
-import copy
-
 # PyTorch Modules
 import torch
 import torch.nn as nn
-import torch.optim as optim
 import torch.nn.functional as F
-from torch.utils.data import ConcatDataset, DataLoader
-from torch.cuda.amp import GradScaler, autocast
 import torch.optim as optim
+from torch.cuda.amp import GradScaler, autocast
+from torch.utils.data import ConcatDataset, DataLoader
+from tqdm import tqdm
 from transformers import AutoModel
-import importlib
+
 # Self-Written Modules
 sys.path.append(os.getcwd())
 import net
 import utils
-
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--seed", type=int, default=100)
@@ -51,9 +50,14 @@ EPOCHS=args.epochs
 LR=args.lr
 MODEL_PATH = args.model_path
 
+# check if model path exists, if not, create it
+if not os.path.exists(MODEL_PATH):
+    os.makedirs(MODEL_PATH)
+
 
 import json
 from collections import defaultdict
+
 config_path = "config.json"
 with open(config_path, "r") as f:
     config = json.load(f)
@@ -67,7 +71,7 @@ for dtype in ["train", "dev"]:
     cur_wavs = utils.load_audio(audio_path, cur_utts)
     if dtype == "train":
         cur_wav_set = utils.WavSet(cur_wavs)
-        cur_wav_set.save_norm_stat(MODEL_PATH+"/train_norm_stat.pkl")
+        cur_wav_set.save_norm_stat(MODEL_PATH + "/train_norm_stat.pkl")
     else:
         if dtype == "dev":
             wav_mean = total_dataset["train"].datasets[0].wav_mean
@@ -202,13 +206,13 @@ for epoch in range(EPOCHS):
     # Save model
     lm.print_stat()
         
-    dev_loss = 3.0 - lm.get_stat("dev_aro") - lm.get_stat("dev_dom") - lm.get_stat("dev_val")
+    dev_loss = 1.0 - 0.2*lm.get_stat("dev_aro") - 0.1*lm.get_stat("dev_dom") - 0.7*lm.get_stat("dev_val")
     if min_loss > dev_loss:
         min_epoch = epoch
         min_loss = dev_loss
 
         print("Save",min_epoch)
-        print("Loss",3.0-min_loss)
+        print("Loss",1.0-min_loss)
         save_model_list = ["ser", "ssl"]
         if is_attentive_pooling:
             save_model_list.append("pool")

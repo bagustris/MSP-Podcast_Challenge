@@ -56,6 +56,83 @@ class MeanPooling(Pooling):
         return pooled
     
 
+class MinPooling(Pooling):
+    def __init__(self):
+        super().__init__()
+    def forward(self, xs, mask):
+        """
+        xs: (batch_size, T, feat_dim)
+        mask: (batch_size, T)
+
+        => output: (batch_size, feat_dim)
+        """
+        feat_lens = self.compute_length_from_mask(mask)
+        pooled_list = []
+        for x, feat_len in zip(xs, feat_lens):
+            pooled = torch.min(x[:feat_len], dim=0).values # (feat_dim, )
+            pooled_list.append(pooled)
+        pooled = torch.stack(pooled_list, dim=0) # (batch_size, feat_dim)
+        return pooled
+
+class MaxPooling(Pooling):
+    def __init__(self):
+        super().__init__()
+    def forward(self, xs, mask):
+        """
+        xs: (batch_size, T, feat_dim)
+        mask: (batch_size, T)
+
+        => output: (batch_size, feat_dim)
+        """
+        feat_lens = self.compute_length_from_mask(mask)
+        pooled_list = []
+        for x, feat_len in zip(xs, feat_lens):
+            pooled = torch.max(x[:feat_len], dim=0).values # (feat_dim, )
+            pooled_list.append(pooled)
+        pooled = torch.stack(pooled_list, dim=0) # (batch_size, feat_dim)
+        return pooled
+
+
+class MinMaxPooling(Pooling):
+    def __init__(self):
+        super().__init__()
+    def forward(self, xs, mask):
+        """
+        xs: (batch_size, T, feat_dim)
+        mask: (batch_size, T)
+
+        => output: (batch_size, feat_dim*2)
+        """
+        feat_lens = self.compute_length_from_mask(mask)
+        pooled_list = []
+        for x, feat_len in zip(xs, feat_lens):
+            min_pooled = torch.min(x[:feat_len], dim=0).values # (feat_dim, )
+            max_pooled = torch.max(x[:feat_len], dim=0).values # (feat_dim, )
+            pooled = torch.cat((min_pooled, max_pooled), dim=0) # (feat_dim*2, )
+            pooled_list.append(pooled)
+        pooled = torch.stack(pooled_list, dim=0) # (batch_size, feat_dim*2)
+        return pooled
+
+class TemporalStatisticsPooling(Pooling):
+    def __init__(self):
+        super().__init__()
+    def forward(self, xs, mask):
+        """
+        xs: (batch_size, T, feat_dim)
+        mask: (batch_size, T)
+
+        => output: (batch_size, feat_dim*2)
+        """
+        feat_lens = self.compute_length_from_mask(mask)
+        pooled_list = []
+        for x, feat_len in zip(xs, feat_lens):
+            mean_pooled = torch.mean(x[:feat_len], dim=0) # (feat_dim, )
+            std_pooled = torch.std(x[:feat_len], dim=0) # (feat_dim, )
+            pooled = torch.cat((mean_pooled, std_pooled), dim=0) # (feat_dim*2, )
+            pooled_list.append(pooled)
+        pooled = torch.stack(pooled_list, dim=0) # (batch_size, feat_dim*2)
+        return pooled
+
 class AttentiveStatisticsPooling(Pooling):
     """
     AttentiveStatisticsPooling
@@ -90,3 +167,33 @@ class AttentiveStatisticsPooling(Pooling):
         return torch.stack(pooled_list)
 
 
+class SelfAttentivePooling(Pooling):
+    """
+    SelfAttentivePooling
+    Paper: Self-Attentive Speaker Embeddings for Text-Independent Speaker Verification
+    Link: https://arxiv.org/pdf/1901.07128.pdf
+    """
+    def __init__(self, input_size):
+        super().__init__()
+        self._indim = input_size
+        self.sap_linear = nn.Linear(input_size, input_size)
+        self.attention = nn.Parameter(torch.FloatTensor(input_size, 1))
+        torch.nn.init.normal_(self.attention, mean=0, std=1)
+
+    def forward(self, xs, mask):
+        """
+        xs: (batch_size, T, feat_dim)
+        mask: (batch_size, T)
+
+        => output: (batch_size, feat_dim)
+        """
+        feat_lens = self.compute_length_from_mask(mask)
+        pooled_list = []
+        for x, feat_len in zip(xs, feat_lens):
+            x = x[:feat_len].unsqueeze(0)
+            h = torch.tanh(self.sap_linear(x))
+            w = torch.matmul(h, self.attention).squeeze(dim=2)
+            w = F.softmax(w, dim=1).view(x.size(0), x.size(1), 1)
+            x = torch.sum(x * w, dim=1)
+            pooled_list.append(x)
+        return torch.stack(pooled_list)
